@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: crypto.CryptoServiceTest
+-------------------------------------------------------------------------------
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.110 s -- in crypto.CryptoServiceTest
