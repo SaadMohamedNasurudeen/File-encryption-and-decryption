@@ -17,7 +17,14 @@ import java.awt.*;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.ItemEvent;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -109,6 +116,9 @@ public class DashboardFrame extends JFrame {
 
         // 3. Bottom Progress Bar and Color-Coded Status
         add(createBottomPanel(), BorderLayout.SOUTH);
+
+        // 4. Load persisted activity history from disk
+        loadHistory();
     }
 
     /**
@@ -918,16 +928,67 @@ public class DashboardFrame extends JFrame {
         worker.execute();
     }
 
+    // Persistent history file located in user home directory
+    private static final File HISTORY_FILE = new File(System.getProperty("user.home"), ".file_crypto_history.log");
+
     private void updateStatCards() {
         statEncryptedVal.setText(String.valueOf(countEncrypted));
         statDecryptedVal.setText(String.valueOf(countDecrypted));
         statFailuresVal.setText(String.valueOf(countFailures));
     }
 
+    private void loadHistory() {
+        if (!HISTORY_FILE.exists()) return;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(HISTORY_FILE), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) continue;
+                String[] parts = line.split("\t", -1);
+                if (parts.length >= 5) {
+                    String timestamp = parts[0];
+                    String action = parts[1];
+                    String result = parts[2];
+                    String fileName = parts[3];
+                    String details = parts[4];
+
+                    int index = historyTableModel.getRowCount() + 1;
+                    historyTableModel.addRow(new Object[]{index, fileName, action, timestamp, result, details});
+
+                    if ("Success".equalsIgnoreCase(result)) {
+                        if ("Encrypt".equalsIgnoreCase(action)) countEncrypted++;
+                        else if ("Decrypt".equalsIgnoreCase(action)) countDecrypted++;
+                    } else if ("Failed".equalsIgnoreCase(result)) {
+                        countFailures++;
+                    }
+                }
+            }
+            updateStatCards();
+        } catch (Exception ignored) {
+            // Graceful fallback if history log is unreadable
+        }
+    }
+
     private void addHistoryRow(String fileName, String action, String result, String details) {
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         int index = historyTableModel.getRowCount() + 1;
         historyTableModel.addRow(new Object[]{index, fileName, action, timestamp, result, details});
+        saveHistoryRow(fileName, action, result, timestamp, details);
+    }
+
+    private void saveHistoryRow(String fileName, String action, String result, String timestamp, String details) {
+        try {
+            File parent = HISTORY_FILE.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            try (BufferedWriter writer = new BufferedWriter(
+                    new OutputStreamWriter(new FileOutputStream(HISTORY_FILE, true), StandardCharsets.UTF_8))) {
+                writer.write(timestamp + "\t" + action + "\t" + result + "\t" + fileName + "\t" + details);
+                writer.newLine();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void clearHistory() {
@@ -936,6 +997,10 @@ public class DashboardFrame extends JFrame {
         countDecrypted = 0;
         countFailures = 0;
         updateStatCards();
+
+        if (HISTORY_FILE.exists()) {
+            HISTORY_FILE.delete();
+        }
     }
 
     private void openSelectedFolder() {
