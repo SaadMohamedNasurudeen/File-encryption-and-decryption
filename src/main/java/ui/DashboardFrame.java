@@ -52,6 +52,9 @@ public class DashboardFrame extends JFrame {
     private DropZonePanel encryptDropZone;
     private JTextField encryptFilePathField;
     private RoundedButton encryptBrowseBtn;
+    private JTextField encryptOutputDirField;
+    private RoundedButton encryptBrowseDirBtn;
+    private RoundedButton encryptResetDirBtn;
     private JPasswordField encryptPasswordField;
     private JPasswordField encryptConfirmPasswordField;
     private PasswordStrengthMeter passwordStrengthMeter;
@@ -60,17 +63,22 @@ public class DashboardFrame extends JFrame {
     private JLabel encryptFileNameVal;
     private JLabel encryptFileSizeVal;
     private JLabel encryptTargetVal;
+    private JLabel encryptDestDirVal;
 
     // --- Decrypt Tab Components ---
     private DropZonePanel decryptDropZone;
     private JTextField decryptFilePathField;
     private RoundedButton decryptBrowseBtn;
+    private JTextField decryptOutputDirField;
+    private RoundedButton decryptBrowseDirBtn;
+    private RoundedButton decryptResetDirBtn;
     private JPasswordField decryptPasswordField;
     private JCheckBox decryptShowPasswordBox;
     private RoundedButton decryptActionBtn;
     private JLabel decryptFileNameVal;
     private JLabel decryptFileSizeVal;
     private JLabel decryptTargetVal;
+    private JLabel decryptDestDirVal;
 
     // --- Bottom Status & Progress ---
     private JProgressBar progressBar;
@@ -84,7 +92,9 @@ public class DashboardFrame extends JFrame {
 
     // State
     private File selectedEncryptFile;
+    private File customEncryptOutputDir;
     private File selectedDecryptFile;
+    private File customDecryptOutputDir;
     private File lastProcessedFile;
     private boolean isOperationRunning = false;
 
@@ -263,21 +273,50 @@ public class DashboardFrame extends JFrame {
         fileChoosePanel.add(encryptBrowseBtn, BorderLayout.EAST);
         formCard.add(fileChoosePanel, gbc);
 
-        // 3. Info Panel Card (File Name, Size, Target Format)
+        // 3. Output Destination Folder Field + Buttons
         gbc.gridy = 3;
+        formCard.add(createFieldLabel("Save Encrypted File To (optional):"), gbc);
+
+        gbc.gridy = 4;
+        JPanel outputDirPanel = new JPanel(new BorderLayout(8, 0));
+        outputDirPanel.setOpaque(false);
+
+        encryptOutputDirField = createStyledTextField("Default: Same directory as selected file");
+        encryptOutputDirField.setEditable(false);
+        attachFileDropTarget(encryptOutputDirField, this::setEncryptOutputDir);
+
+        JPanel outputBtnGroup = new JPanel(new GridLayout(1, 2, 8, 0));
+        outputBtnGroup.setOpaque(false);
+        outputBtnGroup.setPreferredSize(new Dimension(215, 38));
+
+        encryptBrowseDirBtn = new RoundedButton("Choose Folder...", Theme.SURFACE_ALT, Theme.SURFACE_HOVER);
+        encryptBrowseDirBtn.addActionListener(e -> chooseEncryptOutputDir());
+
+        encryptResetDirBtn = new RoundedButton("Reset", Theme.SURFACE_ALT, Theme.SURFACE_HOVER);
+        encryptResetDirBtn.addActionListener(e -> resetEncryptOutputDir());
+
+        outputBtnGroup.add(encryptBrowseDirBtn);
+        outputBtnGroup.add(encryptResetDirBtn);
+
+        outputDirPanel.add(encryptOutputDirField, BorderLayout.CENTER);
+        outputDirPanel.add(outputBtnGroup, BorderLayout.EAST);
+        formCard.add(outputDirPanel, gbc);
+
+        // 4. Info Panel Card (File Name, Size, Target Format, Save Location)
+        gbc.gridy = 5;
         JPanel infoPanel = createFileInfoPanel(true);
         formCard.add(infoPanel, gbc);
 
-        // 4. Password Field
-        gbc.gridy = 4;
+        // 5. Password Field
+        gbc.gridy = 6;
         formCard.add(createFieldLabel("Encryption Password (min 8 characters):"), gbc);
 
-        gbc.gridy = 5;
+        gbc.gridy = 7;
         encryptPasswordField = createStyledPasswordField();
         formCard.add(encryptPasswordField, gbc);
 
-        // 5. Password Strength Meter
-        gbc.gridy = 6;
+        // 6. Password Strength Meter
+        gbc.gridy = 8;
         passwordStrengthMeter = new PasswordStrengthMeter();
         formCard.add(passwordStrengthMeter, gbc);
 
@@ -293,16 +332,16 @@ public class DashboardFrame extends JFrame {
             }
         });
 
-        // 6. Confirm Password Field
-        gbc.gridy = 7;
+        // 7. Confirm Password Field
+        gbc.gridy = 9;
         formCard.add(createFieldLabel("Confirm Encryption Password:"), gbc);
 
-        gbc.gridy = 8;
+        gbc.gridy = 10;
         encryptConfirmPasswordField = createStyledPasswordField();
         formCard.add(encryptConfirmPasswordField, gbc);
 
-        // 7. Show Passwords Checkbox
-        gbc.gridy = 9;
+        // 8. Show Passwords Checkbox
+        gbc.gridy = 11;
         encryptShowPasswordBox = createStyledCheckBox("Show Passwords");
         encryptShowPasswordBox.addItemListener(e -> {
             char echoChar = (e.getStateChange() == ItemEvent.SELECTED) ? (char) 0 : '\u2022';
@@ -311,8 +350,8 @@ public class DashboardFrame extends JFrame {
         });
         formCard.add(encryptShowPasswordBox, gbc);
 
-        // 8. Encrypt Action Button
-        gbc.gridy = 10;
+        // 9. Encrypt Action Button
+        gbc.gridy = 12;
         gbc.insets = new Insets(16, 0, 6, 0);
         encryptActionBtn = new RoundedButton("Encrypt and Protect File (.enc)", Theme.ACCENT, Theme.ACCENT_HOVER, Theme.ACCENT_PRESSED);
         encryptActionBtn.setPreferredSize(new Dimension(300, 44));
@@ -356,21 +395,50 @@ public class DashboardFrame extends JFrame {
         fileChoosePanel.add(decryptBrowseBtn, BorderLayout.EAST);
         formCard.add(fileChoosePanel, gbc);
 
-        // 3. Info Panel Card
+        // 3. Output Destination Folder Field + Buttons
         gbc.gridy = 3;
+        formCard.add(createFieldLabel("Save Restored File To (optional):"), gbc);
+
+        gbc.gridy = 4;
+        JPanel outputDirPanel = new JPanel(new BorderLayout(8, 0));
+        outputDirPanel.setOpaque(false);
+
+        decryptOutputDirField = createStyledTextField("Default: Same directory as encrypted file");
+        decryptOutputDirField.setEditable(false);
+        attachFileDropTarget(decryptOutputDirField, this::setDecryptOutputDir);
+
+        JPanel outputBtnGroup = new JPanel(new GridLayout(1, 2, 8, 0));
+        outputBtnGroup.setOpaque(false);
+        outputBtnGroup.setPreferredSize(new Dimension(215, 38));
+
+        decryptBrowseDirBtn = new RoundedButton("Choose Folder...", Theme.SURFACE_ALT, Theme.SURFACE_HOVER);
+        decryptBrowseDirBtn.addActionListener(e -> chooseDecryptOutputDir());
+
+        decryptResetDirBtn = new RoundedButton("Reset", Theme.SURFACE_ALT, Theme.SURFACE_HOVER);
+        decryptResetDirBtn.addActionListener(e -> resetDecryptOutputDir());
+
+        outputBtnGroup.add(decryptBrowseDirBtn);
+        outputBtnGroup.add(decryptResetDirBtn);
+
+        outputDirPanel.add(decryptOutputDirField, BorderLayout.CENTER);
+        outputDirPanel.add(outputBtnGroup, BorderLayout.EAST);
+        formCard.add(outputDirPanel, gbc);
+
+        // 4. Info Panel Card
+        gbc.gridy = 5;
         JPanel infoPanel = createFileInfoPanel(false);
         formCard.add(infoPanel, gbc);
 
-        // 4. Password Field
-        gbc.gridy = 4;
+        // 5. Password Field
+        gbc.gridy = 6;
         formCard.add(createFieldLabel("Decryption Password:"), gbc);
 
-        gbc.gridy = 5;
+        gbc.gridy = 7;
         decryptPasswordField = createStyledPasswordField();
         formCard.add(decryptPasswordField, gbc);
 
-        // 5. Show Password Checkbox
-        gbc.gridy = 6;
+        // 6. Show Password Checkbox
+        gbc.gridy = 8;
         decryptShowPasswordBox = createStyledCheckBox("Show Password");
         decryptShowPasswordBox.addItemListener(e -> {
             char echoChar = (e.getStateChange() == ItemEvent.SELECTED) ? (char) 0 : '\u2022';
@@ -378,8 +446,8 @@ public class DashboardFrame extends JFrame {
         });
         formCard.add(decryptShowPasswordBox, gbc);
 
-        // 6. Decrypt Action Button
-        gbc.gridy = 7;
+        // 7. Decrypt Action Button
+        gbc.gridy = 9;
         gbc.insets = new Insets(16, 0, 6, 0);
         decryptActionBtn = new RoundedButton("Decrypt and Authenticate File", Theme.SUCCESS, Theme.SUCCESS_HOVER, Theme.SUCCESS_PRESSED);
         decryptActionBtn.setPreferredSize(new Dimension(300, 44));
@@ -390,7 +458,7 @@ public class DashboardFrame extends JFrame {
     }
 
     /**
-     * File metadata info panel card showing Name, Size, and Format.
+     * File metadata info panel card showing Name, Size, Target Format, and Destination Location.
      */
     private JPanel createFileInfoPanel(boolean isEncrypt) {
         JPanel card = new JPanel(new GridBagLayout());
@@ -416,6 +484,10 @@ public class DashboardFrame extends JFrame {
         extTitle.setFont(Theme.FONT_LABEL);
         extTitle.setForeground(Theme.TEXT_MUTED);
 
+        JLabel destTitle = new JLabel("Save Location:");
+        destTitle.setFont(Theme.FONT_LABEL);
+        destTitle.setForeground(Theme.TEXT_MUTED);
+
         JLabel nameVal = new JLabel("No file selected");
         nameVal.setFont(Theme.FONT_INPUT);
         nameVal.setForeground(Theme.TEXT_PRIMARY);
@@ -428,14 +500,20 @@ public class DashboardFrame extends JFrame {
         extVal.setFont(Theme.FONT_INPUT);
         extVal.setForeground(Theme.TEXT_PRIMARY);
 
+        JLabel destVal = new JLabel("—");
+        destVal.setFont(Theme.FONT_INPUT);
+        destVal.setForeground(Theme.TEXT_PRIMARY);
+
         if (isEncrypt) {
             encryptFileNameVal = nameVal;
             encryptFileSizeVal = sizeVal;
             encryptTargetVal = extVal;
+            encryptDestDirVal = destVal;
         } else {
             decryptFileNameVal = nameVal;
             decryptFileSizeVal = sizeVal;
             decryptTargetVal = extVal;
+            decryptDestDirVal = destVal;
         }
 
         g.gridx = 0; g.gridy = 0; g.weightx = 0.2; card.add(nameTitle, g);
@@ -446,6 +524,9 @@ public class DashboardFrame extends JFrame {
 
         g.gridx = 0; g.gridy = 2; g.weightx = 0.2; card.add(extTitle, g);
         g.gridx = 1; g.gridy = 2; g.weightx = 0.8; card.add(extVal, g);
+
+        g.gridx = 0; g.gridy = 3; g.weightx = 0.2; card.add(destTitle, g);
+        g.gridx = 1; g.gridy = 3; g.weightx = 0.8; card.add(destVal, g);
 
         return card;
     }
@@ -640,6 +721,48 @@ public class DashboardFrame extends JFrame {
         updateFileInfo(file, true);
     }
 
+    private void chooseEncryptOutputDir() {
+        JFileChooser chooser = FileChooserHelper.createDirectoryChooser("Select Destination Folder for Encrypted File");
+        if (customEncryptOutputDir != null && customEncryptOutputDir.exists()) {
+            chooser.setCurrentDirectory(customEncryptOutputDir);
+        } else if (selectedEncryptFile != null && selectedEncryptFile.getParentFile() != null) {
+            chooser.setCurrentDirectory(selectedEncryptFile.getParentFile());
+        }
+        int res = chooser.showOpenDialog(this);
+        if (res == JFileChooser.APPROVE_OPTION) {
+            FileChooserHelper.updateLastDirectory(chooser);
+            setEncryptOutputDir(chooser.getSelectedFile());
+        }
+    }
+
+    private void setEncryptOutputDir(File dir) {
+        if (dir == null) return;
+        if (dir.isFile()) {
+            dir = dir.getParentFile();
+        }
+        if (dir != null && dir.exists()) {
+            customEncryptOutputDir = dir;
+            encryptOutputDirField.setText(dir.getAbsolutePath());
+            if (selectedEncryptFile != null) {
+                updateFileInfo(selectedEncryptFile, true);
+            } else if (encryptDestDirVal != null) {
+                encryptDestDirVal.setText(dir.getAbsolutePath());
+                encryptDestDirVal.setToolTipText(dir.getAbsolutePath());
+            }
+        }
+    }
+
+    private void resetEncryptOutputDir() {
+        customEncryptOutputDir = null;
+        encryptOutputDirField.setText("");
+        if (selectedEncryptFile != null) {
+            updateFileInfo(selectedEncryptFile, true);
+        } else if (encryptDestDirVal != null) {
+            encryptDestDirVal.setText("—");
+            encryptDestDirVal.setToolTipText(null);
+        }
+    }
+
     private void chooseDecryptFile() {
         JFileChooser chooser = FileChooserHelper.createFileChooser("Select Encrypted File (.enc)", false);
         int res = chooser.showOpenDialog(this);
@@ -655,6 +778,48 @@ public class DashboardFrame extends JFrame {
         decryptFilePathField.setText(file.getAbsolutePath());
         decryptDropZone.setCurrentFile(file);
         updateFileInfo(file, false);
+    }
+
+    private void chooseDecryptOutputDir() {
+        JFileChooser chooser = FileChooserHelper.createDirectoryChooser("Select Destination Folder for Restored File");
+        if (customDecryptOutputDir != null && customDecryptOutputDir.exists()) {
+            chooser.setCurrentDirectory(customDecryptOutputDir);
+        } else if (selectedDecryptFile != null && selectedDecryptFile.getParentFile() != null) {
+            chooser.setCurrentDirectory(selectedDecryptFile.getParentFile());
+        }
+        int res = chooser.showOpenDialog(this);
+        if (res == JFileChooser.APPROVE_OPTION) {
+            FileChooserHelper.updateLastDirectory(chooser);
+            setDecryptOutputDir(chooser.getSelectedFile());
+        }
+    }
+
+    private void setDecryptOutputDir(File dir) {
+        if (dir == null) return;
+        if (dir.isFile()) {
+            dir = dir.getParentFile();
+        }
+        if (dir != null && dir.exists()) {
+            customDecryptOutputDir = dir;
+            decryptOutputDirField.setText(dir.getAbsolutePath());
+            if (selectedDecryptFile != null) {
+                updateFileInfo(selectedDecryptFile, false);
+            } else if (decryptDestDirVal != null) {
+                decryptDestDirVal.setText(dir.getAbsolutePath());
+                decryptDestDirVal.setToolTipText(dir.getAbsolutePath());
+            }
+        }
+    }
+
+    private void resetDecryptOutputDir() {
+        customDecryptOutputDir = null;
+        decryptOutputDirField.setText("");
+        if (selectedDecryptFile != null) {
+            updateFileInfo(selectedDecryptFile, false);
+        } else if (decryptDestDirVal != null) {
+            decryptDestDirVal.setText("—");
+            decryptDestDirVal.setToolTipText(null);
+        }
     }
 
     /**
@@ -691,13 +856,23 @@ public class DashboardFrame extends JFrame {
         if (isEncrypt) {
             encryptFileNameVal.setText(name);
             encryptFileSizeVal.setText(sizeFormatted);
-            encryptTargetVal.setText(name + ".enc");
+            encryptTargetVal.setText(name + CryptoService.ENCRYPTED_EXTENSION);
+            File destDir = (customEncryptOutputDir != null && customEncryptOutputDir.exists()) ?
+                    customEncryptOutputDir : file.getParentFile();
+            String destPath = destDir != null ? destDir.getAbsolutePath() : "—";
+            encryptDestDirVal.setText(destPath);
+            encryptDestDirVal.setToolTipText(destPath);
         } else {
             decryptFileNameVal.setText(name);
             decryptFileSizeVal.setText(sizeFormatted);
-            String target = name.toLowerCase().endsWith(".enc") ?
-                    name.substring(0, name.length() - 4) : name + ".decrypted";
+            String target = name.toLowerCase().endsWith(CryptoService.ENCRYPTED_EXTENSION) ?
+                    name.substring(0, name.length() - CryptoService.ENCRYPTED_EXTENSION.length()) : name + ".decrypted";
             decryptTargetVal.setText(target);
+            File destDir = (customDecryptOutputDir != null && customDecryptOutputDir.exists()) ?
+                    customDecryptOutputDir : file.getParentFile();
+            String destPath = destDir != null ? destDir.getAbsolutePath() : "—";
+            decryptDestDirVal.setText(destPath);
+            decryptDestDirVal.setToolTipText(destPath);
         }
     }
 
@@ -748,6 +923,24 @@ public class DashboardFrame extends JFrame {
         CryptoService.zeroArray(confirmPassword);
 
         File sourceFile = selectedEncryptFile;
+        File destDir = (customEncryptOutputDir != null && customEncryptOutputDir.exists()) ?
+                customEncryptOutputDir : sourceFile.getParentFile();
+        File targetOutputFile = new File(destDir, sourceFile.getName() + CryptoService.ENCRYPTED_EXTENSION);
+
+        if (targetOutputFile.exists()) {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Destination file already exists:\n" + targetOutputFile.getAbsolutePath() + "\n\nDo you want to overwrite it?",
+                    "File Already Exists",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm != JOptionPane.YES_OPTION) {
+                CryptoService.zeroArray(password);
+                return;
+            }
+        }
+
         setUiLocked(true);
         statusLabel.setForeground(Theme.TEXT_PRIMARY);
         statusLabel.setText("Deriving key (PBKDF2 600,000 iterations) & encrypting " + sourceFile.getName() + "...");
@@ -763,7 +956,7 @@ public class DashboardFrame extends JFrame {
                         publish(pct);
                     }
                 };
-                return cryptoService.encrypt(sourceFile, null, password, listener);
+                return cryptoService.encrypt(sourceFile, targetOutputFile, password, listener);
             }
 
             @Override
@@ -852,6 +1045,28 @@ public class DashboardFrame extends JFrame {
         }
 
         File sourceFile = selectedDecryptFile;
+        File destDir = (customDecryptOutputDir != null && customDecryptOutputDir.exists()) ?
+                customDecryptOutputDir : sourceFile.getParentFile();
+        String sourceName = sourceFile.getName();
+        String restoredName = sourceName.toLowerCase().endsWith(CryptoService.ENCRYPTED_EXTENSION) ?
+                sourceName.substring(0, sourceName.length() - CryptoService.ENCRYPTED_EXTENSION.length()) :
+                sourceName + ".decrypted";
+        File targetOutputFile = new File(destDir, restoredName);
+
+        if (targetOutputFile.exists()) {
+            int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "Destination file already exists:\n" + targetOutputFile.getAbsolutePath() + "\n\nDo you want to overwrite it?",
+                    "File Already Exists",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+            );
+            if (confirm != JOptionPane.YES_OPTION) {
+                CryptoService.zeroArray(password);
+                return;
+            }
+        }
+
         setUiLocked(true);
         statusLabel.setForeground(Theme.TEXT_PRIMARY);
         statusLabel.setText("Deriving key & verifying GCM authentication tag for " + sourceFile.getName() + "...");
@@ -867,7 +1082,7 @@ public class DashboardFrame extends JFrame {
                         publish(pct);
                     }
                 };
-                return cryptoService.decrypt(sourceFile, null, password, listener);
+                return cryptoService.decrypt(sourceFile, targetOutputFile, password, listener);
             }
 
             @Override
@@ -1035,6 +1250,10 @@ public class DashboardFrame extends JFrame {
         decryptActionBtn.setEnabled(!locked);
         encryptBrowseBtn.setEnabled(!locked);
         decryptBrowseBtn.setEnabled(!locked);
+        if (encryptBrowseDirBtn != null) encryptBrowseDirBtn.setEnabled(!locked);
+        if (encryptResetDirBtn != null) encryptResetDirBtn.setEnabled(!locked);
+        if (decryptBrowseDirBtn != null) decryptBrowseDirBtn.setEnabled(!locked);
+        if (decryptResetDirBtn != null) decryptResetDirBtn.setEnabled(!locked);
         encryptPasswordField.setEnabled(!locked);
         encryptConfirmPasswordField.setEnabled(!locked);
         decryptPasswordField.setEnabled(!locked);

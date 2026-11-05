@@ -95,6 +95,31 @@ public final class FileChooserHelper {
     }
 
     /**
+     * Creates and configures a JFileChooser dialog specifically for directory/folder selection.
+     *
+     * @param dialogTitle Title for the folder chooser dialog
+     * @return Configured JFileChooser in DIRECTORIES_ONLY mode
+     */
+    public static JFileChooser createDirectoryChooser(String dialogTitle) {
+        UIManager.put("swing.boldMetal", Boolean.FALSE);
+
+        JFileChooser chooser = new JFileChooser(lastDirectory);
+        chooser.setDialogTitle(dialogTitle);
+        chooser.setPreferredSize(new Dimension(850, 550));
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setMultiSelectionEnabled(false);
+        chooser.setAcceptAllFileFilterUsed(false);
+
+        Action detailsAction = chooser.getActionMap().get("viewTypeDetails");
+        if (detailsAction != null) {
+            detailsAction.actionPerformed(new ActionEvent(chooser, ActionEvent.ACTION_PERFORMED, "viewTypeDetails"));
+        }
+
+        styleComponentTree(chooser);
+        return chooser;
+    }
+
+    /**
      * Updates the persistent last directory from the chooser's selected file or current directory.
      */
     public static void updateLastDirectory(JFileChooser chooser) {

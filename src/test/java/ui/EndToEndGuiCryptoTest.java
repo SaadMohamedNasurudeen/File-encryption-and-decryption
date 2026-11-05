@@ -113,4 +113,41 @@ public class EndToEndGuiCryptoTest {
             frameRef.get().dispose();
         });
     }
+
+    @Test
+    @DisplayName("Verify end-to-end encryption and decryption to custom output directories")
+    void testCustomOutputDirectoryFlow() throws Exception {
+        Path inputDir = Files.createDirectory(tempDir.resolve("input_dir"));
+        Path customEncDir = Files.createDirectory(tempDir.resolve("encrypted_vault"));
+        Path customDecDir = Files.createDirectory(tempDir.resolve("restored_vault"));
+
+        File plainFile = inputDir.resolve("confidential_report.pdf").toFile();
+        String originalData = "Top Secret Financial Report Data 2026";
+        Files.writeString(plainFile.toPath(), originalData, StandardCharsets.UTF_8);
+
+        char[] password = "VaultPassword#2026".toCharArray();
+        CryptoService cryptoService = new CryptoService();
+
+        // 1. Encrypt to custom directory
+        File targetEncFile = new File(customEncDir.toFile(), plainFile.getName() + CryptoService.ENCRYPTED_EXTENSION);
+        File resultEncFile = cryptoService.encrypt(plainFile, targetEncFile, password, null);
+
+        assertNotNull(resultEncFile);
+        assertTrue(resultEncFile.exists());
+        assertEquals(customEncDir.toFile().getAbsolutePath(), resultEncFile.getParentFile().getAbsolutePath(),
+                "Encrypted file must be saved in the custom encrypted vault folder");
+
+        // 2. Decrypt to another custom directory
+        char[] decPassword = "VaultPassword#2026".toCharArray();
+        File targetDecFile = new File(customDecDir.toFile(), "confidential_report.pdf");
+        File resultDecFile = cryptoService.decrypt(resultEncFile, targetDecFile, decPassword, null);
+
+        assertNotNull(resultDecFile);
+        assertTrue(resultDecFile.exists());
+        assertEquals(customDecDir.toFile().getAbsolutePath(), resultDecFile.getParentFile().getAbsolutePath(),
+                "Decrypted file must be saved in the custom restored vault folder");
+
+        String restoredData = Files.readString(resultDecFile.toPath(), StandardCharsets.UTF_8);
+        assertEquals(originalData, restoredData, "Decrypted data in custom folder must match original");
+    }
 }

@@ -73,4 +73,15 @@ public class FileChooserHelperTest {
         assertFalse(defaultFilter.accept(plainDoc), "Decrypt filter should reject non-.enc file by default");
         assertTrue(defaultFilter.accept(subDir), "Decrypt filter should allow directory navigation");
     }
+
+    @Test
+    @DisplayName("FileChooserHelper configures Directory chooser with DIRECTORIES_ONLY mode and 850x550 size")
+    void testDirectoryChooserConfiguration() {
+        JFileChooser chooser = FileChooserHelper.createDirectoryChooser("Select Output Folder");
+
+        assertEquals(new Dimension(850, 550), chooser.getPreferredSize(), "Directory chooser should have 850x550 preferred size");
+        assertEquals(JFileChooser.DIRECTORIES_ONLY, chooser.getFileSelectionMode(), "Chooser mode must be DIRECTORIES_ONLY");
+        assertFalse(chooser.isAcceptAllFileFilterUsed(), "AcceptAll filter should not be enabled for directory chooser");
+        assertEquals("Select Output Folder", chooser.getDialogTitle(), "Dialog title should match");
+    }
 }
