@@ -1,4 +1,5 @@
-target/
+target/*
+!target/file-crypto-tool-1.0.0.jar
 
 # JVM crash dump files
 hs_err_pid*.log
