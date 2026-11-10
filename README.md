@@ -8,7 +8,7 @@ A secure, high-performance desktop application for encrypting and decrypting fil
 
 | Layer / Component | Technology | Description |
 | :--- | :--- | :--- |
-| **Language & Platform** | **Java (JDK 17+)** | Built on Java 17+ standards; compatible with OpenJDK and Oracle JDK 18. |
+| **Language & Platform** | **Java (JDK 17+)** | Built on Java 17+ standards; compatible with OpenJDK and Oracle JDK 18+. |
 | **Build & Dependency Tool** | **Apache Maven (3.8+)** | Dependency management, compiler configuration, packaging, and test runner. |
 | **Cryptographic Engine** | **Java Cryptography (JCA / JCE)** | Standard library only (`javax.crypto`, `java.security`) — zero third-party crypto dependencies. |
 | **Cipher & Mode** | **AES-256 in GCM Mode** | `AES/GCM/NoPadding` with a 128-bit authentication tag (NIST SP 800-38D). |
@@ -17,8 +17,9 @@ A secure, high-performance desktop application for encrypting and decrypting fil
 | **Streaming Pipeline** | **Cipher Streams & NIO** | `CipherInputStream` / `CipherOutputStream` with 64 KB buffers and atomic file moves via `java.nio.file.Files`. |
 | **GUI Framework** | **Java Swing & AWT** | Pure desktop UI (`javax.swing`, `java.awt`); no JavaFX or external UI libraries. |
 | **GUI Concurrency** | **SwingWorker** | Background thread execution keeping the Event Dispatch Thread (EDT) 100% responsive. |
-| **Drag & Drop** | **AWT DnD API** | `java.awt.dnd.DropTarget` supporting file drops on both drop zones and text fields. |
-| **Unit Testing** | **JUnit 5 (Jupiter)** | Unit and integration testing (`org.junit.jupiter:junit-jupiter:5.10.2`). |
+| **Drag & Drop** | **AWT DnD API** | `java.awt.dnd.DropTarget` supporting file drops on drop zones, file inputs, and destination fields. |
+| **File Chooser Helper** | **Custom JFileChooser** | Styled 850x550 dialogs with Details view, dark theme, and dedicated `DIRECTORIES_ONLY` folder selector. |
+| **Unit Testing** | **JUnit 5 (Jupiter)** | 14 automated unit and integration tests (`org.junit.jupiter:junit-jupiter:5.10.2`). |
 | **Launchers** | **Batch & VBScript** | Windows zero-click desktop launchers (`run.bat`, `Launch-App.vbs`). |
 
 ---
@@ -31,7 +32,8 @@ A secure, high-performance desktop application for encrypting and decrypting fil
                       +---------------------------------------+
                       |         DashboardFrame (GUI)          |
                       |  - Encrypt Tab   - Decrypt Tab        |
-                      |  - History Tab   - Stat Badges        |
+                      |  - Destination   - History Tab        |
+                      |  - Stat Badges   - Overwrite Guard    |
                       +-------------------+-------------------+
                                           |
                         Spawns Background | SwingWorker (EDT Free)
@@ -46,12 +48,14 @@ A secure, high-performance desktop application for encrypting and decrypting fil
                       |                                       |
                       v                                       v
          [ ENCRYPTION PIPELINE ]                 [ DECRYPTION PIPELINE ]
-         1. Validate Inputs                      1. Read Salt (16B) & IV (12B)
-         2. Generate Salt & IV                   2. Derive Key (PBKDF2 600K)
-         3. Derive 256-bit Key                   3. Stream to .part Temp File
-         4. Write [Salt][IV] Header              4. Verify GCM Tag on Stream EOF
-         5. Stream Ciphertext + Tag              5. Success -> Move to Destination
-         6. Save as *.enc File                      Failure -> Delete Temp File
+         1. Validate Inputs & Passwords          1. Validate File & Password
+         2. Check Destination & Overwrite        2. Check Destination & Overwrite
+         3. Generate Salt & IV                   3. Read Salt (16B) & IV (12B)
+         4. Derive 256-bit Key (PBKDF2 600K)     4. Derive Key (PBKDF2 600K)
+         5. Write [Salt][IV] Header              5. Stream to .part Temp File
+         6. Stream Ciphertext + GCM Tag          6. Verify GCM Tag on Stream EOF
+         7. Save to Destination (*.enc)          7. Success -> Move to Destination
+                                                    Failure -> Delete Temp File
 ```
 
 ---
@@ -59,31 +63,38 @@ A secure, high-performance desktop application for encrypting and decrypting fil
 ### 2. Encryption Workflow (Step-by-Step)
 
 ```
-[User Selects File] ──► [Drag & Drop or JFileChooser]
-                              │
-                              ▼
-[Input Validation]  ──► File exists? Password >= 8 chars? Passwords match?
-                              │ (If invalid: show JOptionPane error)
-                              ▼
-[Lock UI & Start]   ──► Disable action buttons, set cursor to wait, launch SwingWorker
-                              │
-                              ▼
-[Key Derivation]    ──► SecureRandom generates 16-byte Salt + 12-byte IV
-                        PBKDF2WithHmacSHA256 (600,000 iterations) -> 256-bit AES Key
-                              │
-                              ▼
-[File Header Write] ──► Write [Salt (16 bytes)][IV (12 bytes)] directly to output stream
-                              │
-                              ▼
-[Streaming Cipher]  ──► Read source file in 64 KB chunks through CipherOutputStream
-                        Update ProgressListener -> GUI ProgressBar (0% to 100%)
-                        Append 16-byte GCM Authentication Tag at stream closure
-                              │
-                              ▼
-[Sanitization]      ──► Wipe char[] password and raw key bytes with null characters ('\0')
-                              │
-                              ▼
-[Completion]        ──► Re-enable UI, increment Encrypted stat card, append row to History JTable
+[User Selects File]        ──► [Drag & Drop or JFileChooser]
+                                     │
+                                     ▼
+[Optional Destination]     ──► Default: same folder as original file
+                               OR choose custom destination folder (via "Choose Folder..." / Drag & Drop)
+                                     │
+                                     ▼
+[Input Validation]         ──► File exists? Password >= 8 chars? Passwords match?
+                                     │ (If invalid: show JOptionPane error)
+                                     ▼
+[Overwrite Check]          ──► If destination file exists: show warning prompt to confirm overwrite
+                                     │
+                                     ▼
+[Lock UI & Start]          ──► Disable action buttons, set cursor to wait, launch SwingWorker
+                                     │
+                                     ▼
+[Key Derivation]           ──► SecureRandom generates 16-byte Salt + 12-byte IV
+                               PBKDF2WithHmacSHA256 (600,000 iterations) -> 256-bit AES Key
+                                     │
+                                     ▼
+[File Header Write]        ──► Write [Salt (16 bytes)][IV (12 bytes)] directly to output stream
+                                     │
+                                     ▼
+[Streaming Cipher]         ──► Read source file in 64 KB chunks through CipherOutputStream
+                               Update ProgressListener -> GUI ProgressBar (0% to 100%)
+                               Append 16-byte GCM Authentication Tag at stream closure
+                                     │
+                                     ▼
+[Sanitization]             ──► Wipe char[] password and raw key bytes with null characters ('\0')
+                                     │
+                                     ▼
+[Completion]               ──► Re-enable UI, increment Encrypted stat card, append row to History JTable
 ```
 
 ---
@@ -91,24 +102,31 @@ A secure, high-performance desktop application for encrypting and decrypting fil
 ### 3. Decryption Workflow (Step-by-Step)
 
 ```
-[User Selects .enc] ──► [Drag & Drop or JFileChooser with .enc Filter]
-                              │
-                              ▼
-[Input Validation]  ──► File length >= 44 bytes (28B header + 16B tag)? Password entered?
-                              │
-                              ▼
-[Lock UI & Start]   ──► Launch SwingWorker, start Progress Bar
-                              │
-                              ▼
-[Header Extraction] ──► Read Salt (bytes 0–15) and IV (bytes 16–27)
-                        PBKDF2WithHmacSHA256 (600,000 iterations) -> 256-bit AES Key
-                              │
-                              ▼
-[Staged Decryption] ──► Create staging temporary file: ".dec_tmp_*.part" in target directory
-                        Stream ciphertext through CipherInputStream in 64 KB chunks
-                        Write unverified plaintext ONLY into the temporary file
-                              │
-                              ▼
+[User Selects .enc]        ──► [Drag & Drop or JFileChooser with .enc Filter]
+                                     │
+                                     ▼
+[Optional Destination]     ──► Default: same folder as encrypted file
+                               OR choose custom destination folder (via "Choose Folder..." / Drag & Drop)
+                                     │
+                                     ▼
+[Input Validation]         ──► File length >= 44 bytes (28B header + 16B tag)? Password entered?
+                                     │
+                                     ▼
+[Overwrite Check]          ──► If destination file exists: show warning prompt to confirm overwrite
+                                     │
+                                     ▼
+[Lock UI & Start]          ──► Launch SwingWorker, start Progress Bar
+                                     │
+                                     ▼
+[Header Extraction]        ──► Read Salt (bytes 0–15) and IV (bytes 16–27)
+                               PBKDF2WithHmacSHA256 (600,000 iterations) -> 256-bit AES Key
+                                     │
+                                     ▼
+[Staged Decryption]        ──► Create staging temporary file: ".dec_tmp_*.part" in target directory
+                               Stream ciphertext through CipherInputStream in 64 KB chunks
+                               Write unverified plaintext ONLY into the temporary file
+                                     │
+                                     ▼
 [Authentication Tag Verification]
         │
         ├─► [TAG MISMATCH / BAD PASSWORD / TAMPERED]
@@ -149,15 +167,21 @@ Encrypted files are saved with the `.enc` extension using the binary layout:
 
 - **Modern Dashboard GUI (Swing & AWT)**:
   - Tabbed interface: **Encrypt File**, **Decrypt File**, and **Activity History**.
-  - Interactive file selection with file metadata panel showing filename, size, and destination format.
+  - **Custom Output Destination Selection**:
+    - Optional custom output folder picker for both encryption and decryption tabs.
+    - Dedicated **"Choose Folder..."** dialog in `DIRECTORIES_ONLY` mode with dark theme styling and directory memory.
+    - Convenient **"Reset"** button to instantly revert to the default behavior (saving alongside the original file).
+    - Drag-and-drop folder support directly onto destination input fields.
+    - Pre-flight **Overwrite Protection**: warns and confirms with the user if a file of the same name already exists in the chosen output directory before processing.
+  - Interactive file selection with metadata card displaying file name, file size, target file name, and real-time **Save Location**.
   - Password fields with confirmation validation and show/hide password toggles.
-  - Real-time `JProgressBar` with percentage indicators and dynamic status messages.
-  - Audit trail `JTable` recording file names, actions (Encrypt/Decrypt), timestamps, and status badges (Success/Failed).
-  - Background asynchronous execution using `SwingWorker` to keep the UI responsive.
-  - Input validation with `JOptionPane` error dialogs (file existence, password length >= 8 characters, password matching).
   - Live **Password Strength Meter** (Weak / Medium / Strong colored indicator).
   - Live **Header Stat Badges** tracking Encrypted, Decrypted, and Failure counts.
-  - Advanced **Drag-and-Drop** support for both designated drop zones and file path text fields.
+  - Audit trail `JTable` recording file names, actions (Encrypt/Decrypt), timestamps, and status badges (Success/Failed) with persistent disk logging (`.file_crypto_history.log`).
+  - One-click button to open the folder containing any selected history file in the native system file explorer.
+  - Real-time `JProgressBar` with percentage indicators and dynamic status messages.
+  - Background asynchronous execution using `SwingWorker` keeping the Event Dispatch Thread (EDT) 100% responsive.
+  - Advanced **Drag-and-Drop** support for designated drop zones, file input fields, and output directory fields.
   - Custom 850x550 **Details View File Chooser** with dark theme and metadata preview accessory.
 
 - **Enterprise Cryptography Standards**:
@@ -183,11 +207,11 @@ Encrypted files are saved with the `.enc` extension using the binary layout:
 │   │   └── java
 │   │       ├── Main.java                 # Entry point, sets Look & Feel and launches GUI on EDT
 │   │       ├── crypto
-│   │       │   ├── CryptoService.java    # AES-256 GCM & PBKDF2 logic (pure crypto, no UI code)
+│   │       │   ├── CryptoService.java    # AES-256 GCM & PBKDF2 logic (pure crypto, zero UI dependencies)
 │   │       │   └── ProgressListener.java # Functional callback interface for progress tracking
 │   │       └── ui
-│   │           ├── DashboardFrame.java       # Swing/AWT dashboard GUI with tabs, styling, and workers
-│   │           ├── FileChooserHelper.java    # Styled 850x550 JFileChooser with Details view & preview accessory
+│   │           ├── DashboardFrame.java       # Swing/AWT dashboard GUI with tabs, custom destinations, and workers
+│   │           ├── FileChooserHelper.java    # Styled 850x550 JFileChooser (Files & DIRECTORIES_ONLY modes)
 │   │           ├── DropZonePanel.java        # Drag-and-drop file target with dashed border
 │   │           ├── PasswordStrengthMeter.java# Live visual password strength indicator
 │   │           ├── RoundedButton.java        # Custom antialiased rounded buttons with hover/press states
@@ -197,10 +221,10 @@ Encrypted files are saved with the `.enc` extension using the binary layout:
 │   └── test
 │       └── java
 │           ├── crypto
-│           │   └── CryptoServiceTest.java # Core cryptographic JUnit 5 test suite
+│           │   └── CryptoServiceTest.java # Core cryptographic JUnit 5 test suite (8 tests)
 │           └── ui
-│               ├── EndToEndGuiCryptoTest.java # SwingWorker integration & EDT lifecycle tests
-│               └── FileChooserHelperTest.java # JFileChooser configuration & filter unit tests
+│               ├── EndToEndGuiCryptoTest.java # SwingWorker integration, EDT lifecycle & custom folder tests (3 tests)
+│               └── FileChooserHelperTest.java # JFileChooser configuration, directory mode & filter tests (3 tests)
 ```
 
 ---
@@ -218,6 +242,7 @@ Encrypted files are saved with the `.enc` extension using the binary layout:
 ```bash
 mvn clean test
 ```
+Runs all 14 tests covering cryptography, GCM tampering detection, custom output folder pipelines, directory choosers, and GUI worker lifecycles.
 
 ### 2. Package the Application into an Executable JAR
 ```bash
